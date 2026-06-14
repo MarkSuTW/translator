@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#10141f">
-<title>譯場 InterpDesk — 會議即時翻譯</title>
+<title>三心譯記 TriMind — 三心餓易</title>
 <style>
   :root{
     --ink:#0c1017; --ink-2:#11161f;
@@ -38,11 +38,13 @@
     background:linear-gradient(180deg, rgba(255,255,255,.02), transparent);
     border-bottom:var(--hair);
     box-shadow:0 1px 0 rgba(255,255,255,.03)}
-  .brand{display:flex;align-items:baseline;gap:7px}
-  .brand b{font-size:18px;letter-spacing:4px;font-weight:700}
-  .brand span{font-family:var(--mono);font-size:9px;color:var(--gold);letter-spacing:1.5px}
-  .brand .ver{color:var(--dim);background:rgba(255,255,255,.04);border:var(--hair);
-    padding:1px 6px;border-radius:6px;letter-spacing:0}
+  .brand{display:flex;align-items:center;gap:9px}
+  .brand .logo{width:30px;height:30px;flex-shrink:0}
+  .brand .names{display:flex;flex-direction:column;line-height:1.1}
+  .brand .cn{font-size:16px;letter-spacing:3px;font-weight:700;display:flex;align-items:center;gap:6px}
+  .brand .en{font-family:var(--mono);font-size:8px;color:var(--gold);letter-spacing:2px;margin-top:2px}
+  .brand .ver{font-family:var(--mono);font-size:9px;color:var(--dim);background:rgba(255,255,255,.04);
+    border:var(--hair);padding:1px 5px;border-radius:6px;letter-spacing:0;font-weight:400}
   .hbtns{display:flex;gap:6px}
   .hbtn{background:var(--panel);border:var(--hair);color:var(--dim);
     border-radius:9px;padding:8px 10px;font-size:13px;cursor:pointer;white-space:nowrap;
@@ -50,6 +52,12 @@
   .hbtn:active{background:var(--panel2);border-color:var(--line-bright)}
 
   /* 語言列 */
+  .modebar{display:flex;gap:6px;padding:10px 14px 0;flex-shrink:0}
+  .modetab{flex:1;background:transparent;border:var(--hair);color:var(--dim);
+    border-radius:9px;padding:9px;font-size:13px;font-family:inherit;cursor:pointer;
+    letter-spacing:1px;transition:.15s}
+  .modetab.active{color:var(--ink);font-weight:700;border-color:transparent;
+    background:linear-gradient(180deg, #f3c468, var(--gold))}
   .langbar{display:flex;align-items:center;gap:8px;padding:10px 14px;
     border-bottom:var(--hair);flex-shrink:0}
   select{flex:1;appearance:none;color:var(--paper);border:var(--hair);
@@ -111,6 +119,15 @@
   .badge.google{color:var(--blue);border-color:rgba(94,159,230,.45);
     background:rgba(94,159,230,.07)}
   .badge.backup{color:var(--dim)}
+  .badge.rec{color:var(--jade);border-color:rgba(82,197,150,.45);background:rgba(82,197,150,.08)}
+  .entry.marker{padding:0;margin:20px 0}
+  .entry.marker::before{display:none}
+  .markline{display:flex;align-items:center;gap:9px;color:var(--gold);
+    font-size:13px;font-weight:700;letter-spacing:1px}
+  .markfill{flex:1;height:1px;
+    background:linear-gradient(90deg, rgba(227,173,79,.4), transparent)}
+  .markstar{font-size:13px}
+  .markt{font-family:var(--mono);font-size:10px;color:var(--dim);font-weight:400;letter-spacing:.5px}
   .entry .src{font-size:14px;color:var(--dim);line-height:1.6;margin-bottom:7px}
   .entry .dst{font-size:var(--fs);line-height:1.7;font-weight:500;letter-spacing:.2px}
   .entry .dst.pending{color:var(--dim);font-style:italic}
@@ -144,6 +161,10 @@
       inset 0 -3px 7px rgba(120,80,10,.45);
     transition:transform .12s,box-shadow .2s}
   #mic:active{transform:scale(.95)}
+  #markBtn{width:52px;height:52px;border-radius:50%;flex-shrink:0;cursor:pointer;
+    background:var(--panel2);border:1px solid var(--line-bright);color:var(--gold);
+    font-size:20px;transition:transform .12s}
+  #markBtn:active{transform:scale(.92);background:var(--panel)}
   body.rec #mic{
     color:#fff;border-color:rgba(255,255,255,.22);
     background:
@@ -202,7 +223,7 @@
   button:focus-visible,select:focus-visible,.sheetbtn:focus-visible{
     outline:2px solid var(--gold);outline-offset:2px}
   @media (max-width:400px){
-    .brand span:not(.ver){display:none}
+    .brand .en{display:none}
   }
   @media (prefers-reduced-motion:reduce){
     *{animation:none!important;transition:none!important}
@@ -212,13 +233,35 @@
 <body>
 
 <header>
-  <div class="brand"><b>譯場</b><span>INTERP DESK</span><span class="ver" id="verTag">v1.5</span></div>
+  <div class="brand" onclick="openAbout()" style="cursor:pointer">
+    <svg class="logo" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#f3c468"/><stop offset="1" stop-color="#c2902f"/>
+        </linearGradient>
+      </defs>
+      <circle cx="20" cy="20" r="18.3" fill="none" stroke="url(#lg)" stroke-width="1.5"/>
+      <circle cx="13" cy="20" r="2.3" fill="url(#lg)"/>
+      <path d="M16.5 14.5 A 7 7 0 0 1 16.5 25.5" fill="none" stroke="url(#lg)" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M20 11.5 A 10.5 10.5 0 0 1 20 28.5" fill="none" stroke="url(#lg)" stroke-width="1.6" stroke-linecap="round" opacity=".75"/>
+      <path d="M23.5 8.8 A 14 14 0 0 1 23.5 31.2" fill="none" stroke="url(#lg)" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>
+    </svg>
+    <div class="names">
+      <span class="cn">三心譯記 <span class="ver" id="verTag">v1.9</span></span>
+      <span class="en">TRIMIND · 三心餓易</span>
+    </div>
+  </div>
   <div class="hbtns">
     <button class="hbtn" id="topicBtn" onclick="openTopic()">🎯 主題</button>
     <button class="hbtn" id="keyBtn" onclick="openKey()">⚙ API</button>
     <button class="hbtn" onclick="openSheet()">匯出</button>
   </div>
 </header>
+
+<div class="modebar">
+  <button class="modetab active" id="tabTr" onclick="setMode('tr')">即時翻譯</button>
+  <button class="modetab" id="tabRec" onclick="setMode('rec')">會議記錄</button>
+</div>
 
 <div class="langbar">
   <select id="srcLang">
@@ -233,6 +276,7 @@
     <option value="vi-VN">越南文 Tiếng Việt</option>
     <option value="zh-TW">中文（台灣）</option>
   </select>
+  <span id="dstWrap" style="display:contents">
   <button class="swap" onclick="swapLang()" title="交換語言">⇅</button>
   <select id="dstLang">
     <option value="zh-TW">中文（台灣）</option>
@@ -245,6 +289,7 @@
     <option value="th-TH">泰文 ไทย</option>
     <option value="vi-VN">越南文 Tiếng Việt</option>
   </select>
+  </span>
 </div>
 
 <div class="enginebar" id="engineBar">
@@ -265,8 +310,10 @@
 <div id="log">
   <div class="empty" id="emptyState">
     <div class="lamp"></div>
-    <p>選好語言（或用「🌐 自動偵測」），<br>按下麥克風開始口譯紀錄。<br><br>
-    每句話即時辨識、翻譯，依時間順序留存，<br>結束後可匯出逐字稿或列印報告。</p>
+    <p><b style="color:var(--gold);letter-spacing:2px">三心譯記 TriMind</b><br>
+    <span style="font-size:12px">三心餓易 · 即時翻譯與會議記錄</span><br><br>
+    選好語言（或用「🌐 自動偵測」），按下麥克風開始。<br><br>
+    每句話即時辨識、留存，<br>結束後可匯出逐字稿、列印報告或產生 AI 摘要。</p>
   </div>
 </div>
 
@@ -275,6 +322,7 @@
     <div class="st1" id="st1">STANDBY</div>
     <div class="st2" id="st2">待命中</div>
   </div>
+  <button id="markBtn" onclick="insertMarker()" title="插入重點標記" style="display:none">★</button>
   <button id="mic" onclick="toggleRec()">開始</button>
 </footer>
 
@@ -302,10 +350,62 @@
     <h3>會議紀錄</h3>
     <input id="meetingTitle" type="text" style="font-family:inherit"
       placeholder="會議名稱（選填，會印在報告抬頭）">
-    <button class="sheetbtn" onclick="exportHtml()">下載會議報告（可列印成 PDF）<small>排版精美的雙欄對照，含抬頭與統計</small></button>
-    <button class="sheetbtn" onclick="exportTxt()">下載純文字逐字稿（.txt）<small>含時間、語向、原文與譯文</small></button>
+    <button class="sheetbtn" id="summaryBtn" onclick="makeSummary()" style="border-color:rgba(227,173,79,.4)">✨ 產生 AI 會議摘要<small>用 Gemini 整理重點、決議與待辦事項（需設定 API key）</small></button>
+    <button class="sheetbtn" onclick="exportHtml()">下載會議報告（可列印成 PDF）<small>排版精美，含抬頭、統計與摘要</small></button>
+    <button class="sheetbtn" onclick="exportTxt()">下載純文字逐字稿（.txt）<small>含時間、來源與內容</small></button>
     <button class="sheetbtn" onclick="copyAll()">複製全部到剪貼簿<small>貼到 Email、LINE 或筆記</small></button>
     <button class="sheetbtn danger" onclick="clearAll()">清除本次紀錄</button>
+  </div>
+</div>
+
+<!-- AI 摘要結果面板 -->
+<div id="sumSheet" class="overlay" onclick="if(event.target===this)closeSum()">
+  <div class="sheetbox">
+    <h3>AI 會議摘要</h3>
+    <div id="sumBody" style="font-size:14px;line-height:1.75;white-space:pre-wrap;
+      background:var(--ink-2);border:var(--hair);border-radius:11px;padding:14px;
+      max-height:55vh;overflow-y:auto;margin-bottom:12px">產生中…</div>
+    <button class="sheetbtn" onclick="copySummary()">複製摘要</button>
+    <button class="sheetbtn" onclick="closeSum()">關閉</button>
+  </div>
+</div>
+
+<!-- 關於面板 -->
+<div id="aboutSheet" class="overlay" onclick="if(event.target===this)closeAbout()">
+  <div class="sheetbox">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <svg viewBox="0 0 40 40" width="44" height="44" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
+        <defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#f3c468"/><stop offset="1" stop-color="#c2902f"/></linearGradient></defs>
+        <circle cx="20" cy="20" r="18.3" fill="none" stroke="url(#lg2)" stroke-width="1.5"/>
+        <circle cx="13" cy="20" r="2.3" fill="url(#lg2)"/>
+        <path d="M16.5 14.5 A 7 7 0 0 1 16.5 25.5" fill="none" stroke="url(#lg2)" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M20 11.5 A 10.5 10.5 0 0 1 20 28.5" fill="none" stroke="url(#lg2)" stroke-width="1.6" stroke-linecap="round" opacity=".75"/>
+        <path d="M23.5 8.8 A 14 14 0 0 1 23.5 31.2" fill="none" stroke="url(#lg2)" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>
+      </svg>
+      <div>
+        <div style="font-size:18px;font-weight:700;letter-spacing:2px">三心譯記 <span style="font-size:13px;color:var(--dim)">TriMind</span></div>
+        <div style="font-size:12px;color:var(--gold);font-family:var(--mono);letter-spacing:1px;margin-top:3px">by 三心餓易</div>
+      </div>
+    </div>
+    <p style="font-size:14px;color:var(--paper);line-height:1.8;margin-bottom:12px">
+      這是個人興趣寫的小工具，免費分享給大家用。一套兩用：出國開會、聽研討會當<b>即時翻譯</b>；平常開會當<b>會議記錄器</b>，還能用 AI 自動整理重點摘要。
+    </p>
+    <p style="font-size:13px;color:var(--dim);line-height:1.8;margin-bottom:14px">
+      所有設定（API key、主題、紀錄）都只存在你自己手機的瀏覽器，不會上傳。歡迎自由使用與分享。如果好用，記得跟我說一聲就很開心了 🙂
+    </p>
+    <div style="font-size:12px;color:var(--dim);font-family:var(--mono);letter-spacing:.5px;
+      border-top:1px solid var(--line);padding-top:12px;margin-bottom:14px">
+      版本 <span id="aboutVer"></span>　·　提供：三心餓易
+    </div>
+    <p style="font-size:13px;color:var(--dim);line-height:1.7;margin-bottom:10px">
+      有問題或改進建議？歡迎到 GitHub 留言（需要 GitHub 帳號，留言公開）：
+    </p>
+    <a class="sheetbtn" href="https://github.com/MarkSuTW/translator/issues/new" target="_blank" rel="noopener"
+       style="text-decoration:none;border-color:rgba(227,173,79,.4)">🐛 回報問題 / 提出建議<small>到 GitHub 開一則新留言</small></a>
+    <a class="sheetbtn" href="https://github.com/MarkSuTW/translator/issues" target="_blank" rel="noopener"
+       style="text-decoration:none">💬 看大家回報過的問題<small>瀏覽現有的留言與討論</small></a>
+    <button class="sheetbtn" onclick="closeAbout()">關閉</button>
   </div>
 </div>
 
@@ -345,9 +445,12 @@
 <div id="toast"></div>
 
 <script>
-const APP_VERSION = 'v1.5';
+const APP_VERSION = 'v1.9';
 const $ = id => document.getElementById(id);
-document.addEventListener('DOMContentLoaded',()=>{ const v=$('verTag'); if(v) v.textContent=APP_VERSION; });
+document.addEventListener('DOMContentLoaded',()=>{ const v=$('verTag'); if(v) v.textContent=APP_VERSION; const av=$('aboutVer'); if(av) av.textContent=APP_VERSION; });
+
+function openAbout(){ $('aboutSheet').classList.add('open'); }
+function closeAbout(){ $('aboutSheet').classList.remove('open'); }
 
 const LANG_NAME = {
   'auto':'auto-detected','zh-TW':'Traditional Chinese (Taiwan)','en-US':'English',
@@ -459,19 +562,44 @@ function removeKey(){
   $('keyInput').value=''; refreshEngineBar(); toast('已清除，改用 Google 翻譯');
 }
 
+/* ── 模式：翻譯 / 會議記錄 ── */
+let appMode = 'tr';
+function getMode(){ try{ return localStorage.getItem('app_mode')||'tr'; }catch(_){ return 'tr'; } }
+function setMode(m){
+  if(recording){ toast('請先按停止，再切換模式'); return; }
+  appMode = m;
+  try{ localStorage.setItem('app_mode', m); }catch(_){}
+  applyMode();
+}
+function applyMode(){
+  const rec=(appMode==='rec');
+  $('tabTr').classList.toggle('active', !rec);
+  $('tabRec').classList.toggle('active', rec);
+  $('dstWrap').style.display = rec ? 'none' : 'contents';
+  refreshEngineBar();
+}
+
 /* ── 引擎狀態條 ── */
 function refreshEngineBar(){
   const has = !!getKey();
   const bar = $('engineBar');
-  bar.classList.toggle('engine-ai', has);
-  bar.classList.toggle('engine-google', !has);
-  $('engineText').textContent = has
-    ? '翻譯引擎：Gemini AI（金色徽章＝AI 翻譯）'
-    : '翻譯引擎：Google 翻譯（設定 API 可升級為 AI）';
+  if(appMode==='rec'){
+    bar.classList.remove('engine-google');
+    bar.classList.toggle('engine-ai', has);
+    $('engineText').textContent = '會議記錄模式：純語音轉文字，不翻譯'
+      + (has ? '（可產生 AI 摘要）' : '');
+  }else{
+    bar.classList.toggle('engine-ai', has);
+    bar.classList.toggle('engine-google', !has);
+    $('engineText').textContent = has
+      ? '翻譯引擎：Gemini AI（金色徽章＝AI 翻譯）'
+      : '翻譯引擎：Google 翻譯（設定 API 可升級為 AI）';
+  }
   $('keyBtn').style.color = has ? 'var(--gold)' : 'var(--dim)';
   $('keyBtn').textContent = has ? '⚙ AI ✓' : '⚙ API';
 }
-refreshEngineBar();
+appMode = getMode();
+applyMode();
 
 function toast(msg){
   const t = $('toast'); t.textContent = msg; t.style.display='block';
@@ -563,10 +691,12 @@ function setRecUI(on){
   document.body.classList.toggle('rec', on);
   $('mic').textContent = on?'停止':'開始';
   $('st1').textContent = on?'● LISTENING':'STANDBY';
+  $('markBtn').style.display = (on && appMode==='rec') ? 'block' : 'none';
   const srcTxt = $('srcLang').selectedOptions[0].text;
-  $('st2').textContent = on
-    ? `聆聽中：${srcTxt} → ${$('dstLang').selectedOptions[0].text}`
-    : '待命中';
+  if(!on){ $('st2').textContent='待命中'; return; }
+  $('st2').textContent = (appMode==='rec')
+    ? `記錄中：${srcTxt}`
+    : `聆聽中：${srcTxt} → ${$('dstLang').selectedOptions[0].text}`;
 }
 
 function nowStr(){ return new Date().toTimeString().slice(0,8); }
@@ -584,7 +714,17 @@ function commitEntry(text){
   $('emptyState')?.remove();
   const srcSel=$('srcLang').value, dstLang=$('dstLang').value;
   const time=nowStr();
-  const entry={ id:'e'+(seq++), time, srcSel, srcLabel:LANG_LABEL[srcSel], dstLang,
+
+  // 會議記錄模式：純逐字稿，不翻譯
+  if(appMode==='rec'){
+    const entry={ id:'e'+(seq++), time, kind:'rec', srcSel, srcLabel:LANG_LABEL[srcSel],
+                  src:text, dst:'', engine:'rec', pending:false };
+    entries.push(entry);
+    renderEntry(entry); scrollLog(); persist();
+    return;
+  }
+
+  const entry={ id:'e'+(seq++), time, kind:'tr', srcSel, srcLabel:LANG_LABEL[srcSel], dstLang,
                 src:text, dst:'', detected:'', engine:'', pending:true };
   entries.push(entry);
   const div=renderEntry(entry);
@@ -603,10 +743,31 @@ function commitEntry(text){
   });
 }
 
+function insertMarker(){
+  const label = prompt('重點標記文字（例如：議題二、結論、待辦）', '重點');
+  if(label===null) return;
+  const entry={ id:'e'+(seq++), time:nowStr(), kind:'mark', text:(label.trim()||'重點') };
+  entries.push(entry);
+  renderEntry(entry); scrollLog(); persist();
+  toast('已插入標記');
+}
+
 function renderEntry(entry){
   $('emptyState')?.remove();
   const div=document.createElement('div');
-  div.className='entry tapcopy'; div.id=entry.id;
+  div.id=entry.id;
+
+  if(entry.kind==='mark'){
+    div.className='entry marker';
+    div.innerHTML=`<div class="markline"><span class="markstar">★</span>`+
+      `<span class="marktext"></span><span class="markfill"></span><span class="markt"></span></div>`;
+    div.querySelector('.marktext').textContent=entry.text;
+    div.querySelector('.markt').textContent=entry.time;
+    $('log').appendChild(div);
+    return div;
+  }
+
+  div.className='entry tapcopy';
   div.innerHTML=
     `<div class="meta"><span class="t">${entry.time}</span>`+
     `<span class="dir"></span><span class="badge"></span></div>`+
@@ -620,11 +781,22 @@ function renderEntry(entry){
 
 function updateEntryView(div, entry){
   const dir=div.querySelector('.dir');
-  const srcShow=(entry.srcSel==='auto' && entry.detected)?entry.detected:entry.srcLabel;
-  dir.textContent=`${srcShow} → ${LANG_LABEL[entry.dstLang]}`;
   const dEl=div.querySelector('.dst');
   const b=div.querySelector('.badge');
   b.className='badge';
+
+  // 會議記錄模式：只有一段文字，沒有譯文
+  if(entry.kind==='rec'){
+    dir.textContent=entry.srcLabel;
+    div.querySelector('.src').style.color='var(--paper)';
+    div.querySelector('.src').style.fontSize='var(--fs)';
+    dEl.style.display='none';
+    b.classList.add('rec'); b.textContent='記錄';
+    return;
+  }
+
+  const srcShow=(entry.srcSel==='auto' && entry.detected)?entry.detected:entry.srcLabel;
+  dir.textContent=`${srcShow} → ${LANG_LABEL[entry.dstLang]}`;
   if(entry.pending){
     dEl.textContent='翻譯中…'; dEl.classList.add('pending');
     b.classList.add('pending'); b.textContent='…';
@@ -640,7 +812,8 @@ function updateEntryView(div, entry){
 function scrollLog(){ const l=$('log'); l.scrollTop=l.scrollHeight; }
 
 function copyOne(entry){
-  navigator.clipboard?.writeText(`${entry.src}\n${entry.dst}`).then(
+  const txt = entry.kind==='rec' ? entry.src : `${entry.src}\n${entry.dst}`;
+  navigator.clipboard?.writeText(txt).then(
     ()=>toast('已複製這句'), ()=>toast('複製失敗'));
 }
 
@@ -721,16 +894,26 @@ async function googleTranslate(text, sl, tl){
 }
 
 /* ── 匯出 ── */
-function openSheet(){ $('sheet').classList.add('open'); }
+let lastSummary='';
+function openSheet(){
+  $('summaryBtn').style.display = (appMode==='rec'||entries.some(e=>e.kind==='rec')) ? 'block' : 'block';
+  $('sheet').classList.add('open');
+}
 function closeSheet(){ $('sheet').classList.remove('open'); }
 
-function engineName(e){ return e==='ai'?'Gemini AI':e==='google'?'Google 翻譯':'備援'; }
+function engineName(e){ return e==='ai'?'Gemini AI':e==='google'?'Google 翻譯':e==='rec'?'語音記錄':'備援'; }
 
 function buildTxt(){
   const d=new Date();
-  const title=$('meetingTitle').value.trim()||'會議翻譯紀錄';
-  let s=`${title}\n日期：${d.toLocaleString('zh-TW')}\n句數：${entries.length}\n產生工具：譯場 InterpDesk ${APP_VERSION}\n${'─'.repeat(32)}\n\n`;
+  const isRec=entries.some(e=>e.kind==='rec') && !entries.some(e=>e.kind==='tr');
+  const title=$('meetingTitle').value.trim()||(isRec?'會議記錄':'會議翻譯紀錄');
+  const cnt=entries.filter(e=>e.kind!=='mark').length;
+  let s=`${title}\n日期：${d.toLocaleString('zh-TW')}\n句數：${cnt}\n產生工具：三心譯記 TriMind ${APP_VERSION}\n`;
+  if(lastSummary) s+=`\n【AI 摘要】\n${lastSummary}\n`;
+  s+=`${'─'.repeat(32)}\n\n`;
   entries.forEach(e=>{
+    if(e.kind==='mark'){ s+=`\n★ ${e.text}　[${e.time}]\n\n`; return; }
+    if(e.kind==='rec'){ s+=`[${e.time}] ${e.src}\n`; return; }
     s+=`[${e.time}] ${e.srcLabel} → ${LANG_LABEL[e.dstLang]}（${engineName(e.engine)}）\n`;
     s+=`原文：${e.src}\n譯文：${e.dst||'（未完成）'}\n\n`;
   });
@@ -739,17 +922,36 @@ function buildTxt(){
 
 function buildHtml(){
   const d=new Date();
-  const title=($('meetingTitle').value.trim()||'會議翻譯紀錄');
+  const isRec=entries.some(e=>e.kind==='rec') && !entries.some(e=>e.kind==='tr');
+  const title=($('meetingTitle').value.trim()||(isRec?'會議記錄':'會議翻譯紀錄'));
   const esc=t=>(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const aiN=entries.filter(e=>e.engine==='ai').length;
-  const rows=entries.map(e=>`
-    <tr>
-      <td class="tc">${e.time}</td>
-      <td class="dir">${e.srcLabel}→${LANG_LABEL[e.dstLang]}</td>
-      <td class="src">${esc(e.src)}</td>
-      <td class="dst">${esc(e.dst)||'<i>（未完成）</i>'}</td>
-      <td class="eng eng-${e.engine}">${engineName(e.engine)}</td>
-    </tr>`).join('');
+  const cnt=entries.filter(e=>e.kind!=='mark').length;
+
+  const summaryBlock = lastSummary
+    ? `<div class="summary"><h2>AI 摘要</h2><div class="sumtext">${esc(lastSummary)}</div></div>` : '';
+
+  let rows;
+  if(isRec){
+    rows=entries.map(e=>{
+      if(e.kind==='mark') return `<tr class="mk"><td class="tc">${e.time}</td><td colspan="2">★ ${esc(e.text)}</td></tr>`;
+      return `<tr><td class="tc">${e.time}</td><td class="rectext" colspan="2">${esc(e.src)}</td></tr>`;
+    }).join('');
+  }else{
+    rows=entries.map(e=>{
+      if(e.kind==='mark') return `<tr class="mk"><td class="tc">${e.time}</td><td colspan="4">★ ${esc(e.text)}</td></tr>`;
+      return `<tr><td class="tc">${e.time}</td><td class="dir">${e.srcLabel}→${LANG_LABEL[e.dstLang]}</td>`+
+        `<td class="src">${esc(e.src)}</td><td class="dst">${esc(e.dst)||'<i>（未完成）</i>'}</td>`+
+        `<td class="eng eng-${e.engine}">${engineName(e.engine)}</td></tr>`;
+    }).join('');
+  }
+
+  const head = isRec
+    ? `<tr><th>時間</th><th colspan="2">內容</th></tr>`
+    : `<tr><th>時間</th><th>語向</th><th>原文</th><th>譯文</th><th>引擎</th></tr>`;
+  const stat = isRec
+    ? `<span>總筆數：<b>${cnt}</b></span>`
+    : `<span>總句數：<b>${cnt}</b></span><span>AI 翻譯：<b>${entries.filter(e=>e.engine==='ai').length}</b> 句</span>`;
+
   return `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8">
 <title>${esc(title)}</title>
 <style>
@@ -759,6 +961,9 @@ function buildHtml(){
   h1{font-size:22px;margin:0 0 4px;border-bottom:3px solid #d9a441;padding-bottom:10px}
   .info{color:#666;font-size:13px;margin:10px 0 4px;display:flex;gap:20px;flex-wrap:wrap}
   .info b{color:#1a1f2b}
+  .summary{margin:18px 0;padding:16px 18px;background:#fdf6e8;border:1px solid #e8d9b0;border-radius:10px}
+  .summary h2{font-size:15px;margin:0 0 8px;color:#9a7320}
+  .sumtext{white-space:pre-wrap;font-size:14px}
   table{width:100%;border-collapse:collapse;margin-top:18px;font-size:14px}
   th{background:#1a2030;color:#fff;text-align:left;padding:9px 10px;font-size:12px;letter-spacing:1px}
   td{border-bottom:1px solid #e2e6ee;padding:10px;vertical-align:top}
@@ -766,22 +971,67 @@ function buildHtml(){
   .dir{white-space:nowrap;color:#888;font-size:12px}
   .src{color:#666;width:32%}
   .dst{font-weight:600;width:36%}
+  .rectext{font-size:14px}
+  .mk td{background:#fdf6e8;color:#9a7320;font-weight:700;letter-spacing:1px}
   .eng{font-size:11px;white-space:nowrap;text-align:center}
   .eng-ai{color:#b8860b;font-weight:700}
   .eng-google{color:#3b7bc4}
-  .eng-backup{color:#999}
+  .eng-backup,.eng-rec{color:#999}
   tr:nth-child(even) td{background:#fafbfd}
+  .mk td{background:#fdf6e8!important}
   footer{margin-top:22px;color:#999;font-size:11px;text-align:center;border-top:1px solid #e2e6ee;padding-top:12px}
   @media print{body{padding:0}th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body>
 <h1>${esc(title)}</h1>
-<div class="info"><span>日期：<b>${d.toLocaleString('zh-TW')}</b></span>
-<span>總句數：<b>${entries.length}</b></span>
-<span>AI 翻譯：<b>${aiN}</b> 句　Google：<b>${entries.length-aiN}</b> 句</span></div>
-<table><thead><tr><th>時間</th><th>語向</th><th>原文</th><th>譯文</th><th>引擎</th></tr></thead>
-<tbody>${rows}</tbody></table>
-<footer>由 譯場 InterpDesk ${APP_VERSION} 產生　·　在瀏覽器中按「列印 → 另存為 PDF」即可保存</footer>
+<div class="info"><span>日期：<b>${d.toLocaleString('zh-TW')}</b></span>${stat}</div>
+${summaryBlock}
+<table><thead>${head}</thead><tbody>${rows}</tbody></table>
+<footer>由 三心餓易 · 三心譯記 TriMind ${APP_VERSION} 產生　·　在瀏覽器中按「列印 → 另存為 PDF」即可保存</footer>
 </body></html>`;
+}
+
+/* ── AI 會議摘要 ── */
+function openSum(){ $('sumSheet').classList.add('open'); }
+function closeSum(){ $('sumSheet').classList.remove('open'); }
+function copySummary(){
+  if(!lastSummary){ toast('尚無摘要'); return; }
+  navigator.clipboard?.writeText(lastSummary).then(()=>toast('已複製摘要'),()=>toast('複製失敗'));
+}
+
+async function makeSummary(){
+  const key=getKey();
+  if(!key){ toast('請先在 ⚙ API 設定 Gemini key'); return; }
+  const lines=entries.filter(e=>e.kind!=='mark').map(e=> e.kind==='rec'?e.src:(e.dst||e.src));
+  const marks=entries.filter(e=>e.kind==='mark').map(e=>e.text);
+  if(!lines.length){ toast('目前沒有內容可摘要'); return; }
+
+  closeSheet(); $('sumBody').textContent='產生中…'; openSum();
+  const topic=getTopic();
+  const transcript=lines.join('\n');
+  const prompt=
+    '你是專業的會議記錄助理。以下是一場會議的逐字稿'
+    +(topic?('，會議主題：'+topic):'')
+    +(marks.length?('，現場標記的重點：'+marks.join('、')):'')
+    +'。請用繁體中文整理成結構清楚的會議摘要，包含三個部分：\n'
+    +'1. 會議重點（條列 3-6 點）\n2. 決議事項（若無則寫「無明確決議」）\n3. 待辦事項與負責方向（若無則寫「無」）\n'
+    +'請直接輸出摘要內容，不要加開場白。\n\n逐字稿：\n'+transcript;
+
+  try{
+    const res=await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+encodeURIComponent(key),
+      { method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ contents:[{parts:[{text:prompt}]}],
+          generationConfig:{ temperature:0.3, maxOutputTokens:2048 } }) });
+    if(!res.ok) throw new Error('gemini '+res.status);
+    const data=await res.json();
+    const out=(data?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim();
+    if(!out) throw new Error('empty');
+    lastSummary=out;
+    $('sumBody').textContent=out;
+    persist();
+  }catch(err){
+    $('sumBody').textContent='摘要產生失敗，請稍後再試。可能是網路或 API 額度問題。';
+  }
 }
 
 function download(name, content, type){
@@ -811,7 +1061,7 @@ async function copyAll(){
 function clearAll(){
   if(!entries.length){ closeSheet(); return; }
   if(!confirm('確定清除本次所有紀錄？此動作無法復原。')) return;
-  entries=[]; seq=0; $('log').innerHTML='';
+  entries=[]; seq=0; lastSummary=''; $('log').innerHTML='';
   try{ localStorage.removeItem('entries'); }catch(_){}
   closeSheet(); toast('已清除');
 }
