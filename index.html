@@ -448,18 +448,28 @@ async function geminiTranslate(text, fromSel, toLang, key){
     { method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         contents:[{parts:[{text:prompt}]}],
-        generationConfig:{ temperature:0.2, maxOutputTokens:1000, responseMimeType:'application/json' }
+        generationConfig:{ temperature:0.2, maxOutputTokens:2048, responseMimeType:'application/json' }
       })
     });
   if(!res.ok) throw new Error('gemini '+res.status);
   const data=await res.json();
   const raw=(data?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim();
-  let obj;
-  try{ obj=JSON.parse(raw); }
-  catch(_){ // 萬一不是合法 JSON，整段當譯文
-    return { text:raw, engine:'ai', detected:'' };
+  // 先試標準 JSON 解析
+  try{
+    const obj=JSON.parse(raw);
+    return { text:(obj.t||'').trim(), engine:'ai', detected:auto?(obj.lang||''):'' };
+  }catch(_){}
+  // JSON 被截斷或格式異常：用正則把 lang 與 t 的內容抽出來
+  const langM=raw.match(/"lang"\s*:\s*"([^"]*)"/);
+  const tM=raw.match(/"t"\s*:\s*"((?:[^"\\]|\\.)*)"?/);
+  if(tM){
+    const txt=tM[1].replace(/\\"/g,'"').replace(/\\n/g,' ').replace(/\\\\/g,'\\').trim();
+    return { text:txt, engine:'ai', detected:auto?(langM?langM[1]:''):'' };
   }
-  return { text:(obj.t||'').trim(), engine:'ai', detected:auto?(obj.lang||''):'' };
+  // 完全不像 JSON：把可能的 JSON 外框去掉後當作譯文
+  const stripped=raw.replace(/^\s*\{?\s*"?lang"?\s*:\s*"[^"]*"\s*,?\s*"?t"?\s*:\s*"?/i,'')
+                    .replace(/"?\s*\}?\s*$/,'').trim();
+  return { text:stripped||raw, engine:'ai', detected:'' };
 }
 
 async function googleTranslate(text, sl, tl){
