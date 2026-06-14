@@ -177,6 +177,16 @@
   .sheetbtn:active{background:rgba(255,255,255,.06);border-color:var(--line-bright)}
   .sheetbtn small{display:block;color:var(--dim);font-size:12px;margin-top:3px;line-height:1.5}
   .danger{color:var(--red)}
+  .switch-row{display:flex;align-items:center;justify-content:space-between;gap:14px;
+    background:rgba(255,255,255,.03);border:var(--hair);border-radius:11px;padding:13px 14px;cursor:pointer}
+  .switch-row span{font-size:14px;color:var(--paper)}
+  .switch-row small{display:block;color:var(--dim);font-size:12px;margin-top:4px;line-height:1.55}
+  .switch-row input{width:46px;height:27px;flex-shrink:0;appearance:none;cursor:pointer;
+    background:var(--line);border-radius:14px;position:relative;transition:background .2s;margin:0}
+  .switch-row input::after{content:'';position:absolute;top:3px;left:3px;width:21px;height:21px;
+    border-radius:50%;background:#fff;transition:transform .2s}
+  .switch-row input:checked{background:var(--gold)}
+  .switch-row input:checked::after{transform:translateX(19px)}
   input[type=password],input[type=text],textarea{width:100%;background:var(--ink-2);
     border:var(--hair);color:var(--paper);border-radius:11px;padding:13px 14px;
     font-size:15px;font-family:var(--mono);margin-bottom:10px;transition:border-color .15s}
@@ -202,7 +212,7 @@
 <body>
 
 <header>
-  <div class="brand"><b>譯場</b><span>INTERP DESK</span><span class="ver" id="verTag">v1.4</span></div>
+  <div class="brand"><b>譯場</b><span>INTERP DESK</span><span class="ver" id="verTag">v1.5</span></div>
   <div class="hbtns">
     <button class="hbtn" id="topicBtn" onclick="openTopic()">🎯 主題</button>
     <button class="hbtn" id="keyBtn" onclick="openKey()">⚙ API</button>
@@ -316,13 +326,26 @@
     <p style="font-size:12px;color:var(--dim);line-height:1.7;margin-top:6px">
       取得方式：aistudio.google.com → Get API key → Create API key
     </p>
+
+    <div style="border-top:1px solid var(--line);margin:18px 0 14px"></div>
+    <h3>收音進階設定</h3>
+    <label class="switch-row" onclick="event.stopPropagation()">
+      <span>
+        關閉回聲消除與噪音抑制
+        <small>要用手機收「電腦喇叭／音源孔／線路」的聲音時打開。收真人講話則建議關閉。效果視手機與瀏覽器而定。</small>
+      </span>
+      <input type="checkbox" id="rawMicChk" onchange="toggleRawMic(this.checked)">
+    </label>
+    <p style="font-size:12px;color:var(--dim);line-height:1.7;margin-top:10px">
+      關於「叮咚」聲：那是手機每次「重新聆聽」的系統提示音。收不到聲音時它會不斷重試、不斷叮咚。打開上面的開關讓它收得到聲音後，重試會減少、叮咚也會跟著大幅變少。那聲音本身屬手機系統層級，網頁無法直接靜音，但多數手機可在系統設定關閉語音輸入提示音。
+    </p>
   </div>
 </div>
 
 <div id="toast"></div>
 
 <script>
-const APP_VERSION = 'v1.4';
+const APP_VERSION = 'v1.5';
 const $ = id => document.getElementById(id);
 document.addEventListener('DOMContentLoaded',()=>{ const v=$('verTag'); if(v) v.textContent=APP_VERSION; });
 
@@ -410,7 +433,20 @@ function getKey(){
   try{ return localStorage.getItem('gemini_key') || memKey; }catch(_){ return memKey; }
 }
 function setKeyVal(v){ memKey = v; try{ localStorage.setItem('gemini_key', v); }catch(_){} }
-function openKey(){ $('keyInput').value = getKey(); $('keySheet').classList.add('open'); }
+
+/* 收音進階：關閉回聲消除/噪音抑制 */
+function getRawMic(){ try{ return localStorage.getItem('raw_mic')==='1'; }catch(_){ return false; } }
+function toggleRawMic(on){
+  try{ localStorage.setItem('raw_mic', on?'1':'0'); }catch(_){}
+  toast(on?'已開啟：可收喇叭/線路聲（下次開始生效）':'已關閉：回到一般收音');
+  if(recording) toast('設定已存，請按停止再重新開始才會套用');
+}
+
+function openKey(){
+  $('keyInput').value = getKey();
+  $('rawMicChk').checked = getRawMic();
+  $('keySheet').classList.add('open');
+}
 function closeKey(){ $('keySheet').classList.remove('open'); }
 function saveKey(){
   const v = $('keyInput').value.trim();
@@ -451,6 +487,7 @@ function swapLang(){
 
 /* ── 語音辨識 ── */
 let rec=null, recording=false, manualStop=true;
+let micStream=null;
 let entries=[];   // {time, srcLabel, dstLang, src, dst, engine}
 let seq=0;
 
@@ -464,9 +501,19 @@ function recogLang(){
   return n;
 }
 
-function startRec(){
+async function startRec(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){ toast('此瀏覽器不支援語音辨識，請改用 Chrome'); return; }
+
+  // 進階：若開啟「關閉回聲消除」，先持有一條原始麥克風音軌
+  if(getRawMic()){
+    try{
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+      });
+    }catch(_){ micStream=null; }
+  }
+
   rec = new SR();
   rec.lang = recogLang();
   rec.continuous = true;
@@ -507,6 +554,7 @@ function startRec(){
 function stopRec(){
   manualStop=true; recording=false;
   if(rec) try{ rec.stop(); }catch(_){}
+  if(micStream){ try{ micStream.getTracks().forEach(t=>t.stop()); }catch(_){} micStream=null; }
   releaseWake();
   setRecUI(false);
 }
