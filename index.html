@@ -124,6 +124,7 @@
 <header>
   <div class="brand"><b>譯場</b><span>INTERP DESK</span></div>
   <div class="hbtns">
+    <button class="hbtn" id="topicBtn" onclick="openTopic()">🎯 主題</button>
     <button class="hbtn" id="keyBtn" onclick="openKey()">⚙ API</button>
     <button class="hbtn" onclick="openSheet()">匯出</button>
   </div>
@@ -181,6 +182,24 @@
   </div>
   <button id="mic" onclick="toggleRec()">開始</button>
 </footer>
+
+<!-- 主題/術語面板 -->
+<div id="topicSheet" class="overlay" onclick="if(event.target===this)closeTopic()">
+  <div class="sheetbox">
+    <h3>研討會 / 會議主題提示</h3>
+    <p style="font-size:13px;color:var(--dim);line-height:1.7;margin-bottom:12px">
+      填入這場的主題與專有名詞（中英皆可），AI 翻譯會更準確地處理術語與縮寫。<br>
+      例如：<i>金融科技研討會，主題含區塊鏈結算、CBDC、跨境支付、KYC。講者多為泰國與新加坡金融業。</i><br>
+      只在使用 Gemini AI 翻譯時生效，留空也能正常運作。
+    </p>
+    <textarea id="topicInput" rows="4" placeholder="這場會議的主題、領域、常見專有名詞…"
+      style="width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--paper);
+      border-radius:10px;padding:13px 14px;font-size:14px;font-family:inherit;line-height:1.6;
+      resize:vertical;margin-bottom:10px"></textarea>
+    <button class="sheetbtn" style="text-align:center;background:var(--gold);color:var(--ink);font-weight:700;border:none" onclick="saveTopic()">儲存</button>
+    <button class="sheetbtn danger" onclick="clearTopic()">清除主題</button>
+  </div>
+</div>
 
 <!-- 匯出面板 -->
 <div id="sheet" class="overlay" onclick="if(event.target===this)closeSheet()">
@@ -243,7 +262,59 @@ function setFont(d){
 }
 try{ const s = +localStorage.getItem('font_step'); if(s){ fontStep=s; setFont(0);} }catch(_){}
 
-/* ── API Key 管理 ── */
+/* ── 研討會主題提示 ── */
+function getTopic(){ try{ return localStorage.getItem('topic')||''; }catch(_){ return ''; } }
+function openTopic(){ $('topicInput').value=getTopic(); $('topicSheet').classList.add('open'); }
+function closeTopic(){ $('topicSheet').classList.remove('open'); }
+function saveTopic(){
+  try{ localStorage.setItem('topic', $('topicInput').value.trim()); }catch(_){}
+  refreshTopicBtn(); closeTopic();
+  toast($('topicInput').value.trim()?'主題已儲存':'主題已清空');
+}
+function clearTopic(){
+  try{ localStorage.removeItem('topic'); }catch(_){}
+  $('topicInput').value=''; refreshTopicBtn(); toast('已清除主題');
+}
+function refreshTopicBtn(){
+  const has=!!getTopic();
+  $('topicBtn').style.color=has?'var(--gold)':'var(--dim)';
+  $('topicBtn').textContent=has?'🎯 主題✓':'🎯 主題';
+}
+refreshTopicBtn();
+
+/* ── 螢幕保持喚醒（長時間聆聽用）── */
+let wakeLock=null;
+async function acquireWake(){
+  try{ if('wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen'); } }catch(_){}
+}
+function releaseWake(){ try{ wakeLock?.release(); }catch(_){} wakeLock=null; }
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible' && recording && !wakeLock) acquireWake();
+});
+
+/* ── 自動存檔（防當機 / 防誤觸）── */
+function persist(){
+  try{ localStorage.setItem('entries', JSON.stringify(entries)); }catch(_){}
+}
+function restore(){
+  try{
+    const saved=JSON.parse(localStorage.getItem('entries')||'[]');
+    if(saved.length){
+      entries=saved;
+      let maxSeq=0;
+      $('emptyState')?.remove();
+      entries.forEach(e=>{
+        const n=parseInt((e.id||'e0').slice(1),10); if(n>maxSeq) maxSeq=n;
+        if(e.pending){ e.pending=false; if(!e.dst){ e.dst='（上次未完成）'; e.engine='fail'; } }
+        renderEntry(e);
+      });
+      seq=maxSeq+1;
+      scrollLog();
+      toast('已復原上次紀錄（'+entries.length+' 句）');
+    }
+  }catch(_){}
+}
+
 let memKey = '';
 function getKey(){
   try{ return localStorage.getItem('gemini_key') || memKey; }catch(_){ return memKey; }
@@ -340,11 +411,13 @@ function startRec(){
   };
   manualStop=false;
   try{ rec.start(); }catch(_){}
+  acquireWake();
   setRecUI(true);
 }
 function stopRec(){
   manualStop=true; recording=false;
   if(rec) try{ rec.stop(); }catch(_){}
+  releaseWake();
   setRecUI(false);
 }
 function setRecUI(on){
@@ -372,44 +445,58 @@ function addLive(){
 function commitEntry(text){
   $('emptyState')?.remove();
   const srcSel=$('srcLang').value, dstLang=$('dstLang').value;
-  const id='e'+(seq++);
   const time=nowStr();
-  const entry={ time, srcSel, srcLabel:LANG_LABEL[srcSel], dstLang, src:text, dst:'', detected:'', engine:'' };
+  const entry={ id:'e'+(seq++), time, srcSel, srcLabel:LANG_LABEL[srcSel], dstLang,
+                src:text, dst:'', detected:'', engine:'', pending:true };
   entries.push(entry);
-
-  const div=document.createElement('div');
-  div.className='entry tapcopy'; div.id=id;
-  div.innerHTML=
-    `<div class="meta"><span class="t">${time}</span>`+
-    `<span class="dir">${LANG_LABEL[srcSel]} → ${LANG_LABEL[dstLang]}</span>`+
-    `<span class="badge pending">…</span></div>`+
-    `<div class="src"></div><div class="dst pending">翻譯中…</div>`;
-  div.querySelector('.src').textContent=text;
-  div.onclick=()=>copyOne(entry);
-  $('log').appendChild(div);
+  const div=renderEntry(entry);
   scrollLog();
 
   translate(text, srcSel, dstLang).then(r=>{
-    entry.dst=r.text; entry.engine=r.engine; entry.detected=r.detected||'';
-    const dEl=div.querySelector('.dst');
-    dEl.textContent=r.text; dEl.classList.remove('pending');
-    // 徽章
-    const b=div.querySelector('.badge');
-    b.classList.remove('pending');
-    if(r.engine==='ai'){ b.classList.add('ai'); b.textContent='AI'; }
-    else if(r.engine==='google'){ b.classList.add('google'); b.textContent='google'; }
-    else { b.classList.add('backup'); b.textContent='備援'; }
-    // 自動偵測：把實際語言補回方向標
-    if(srcSel==='auto' && r.detected){
-      div.querySelector('.dir').textContent = r.detected+' → '+LANG_LABEL[dstLang];
-      entry.srcLabel = r.detected;
-    }
+    entry.dst=r.text; entry.engine=r.engine; entry.detected=r.detected||''; entry.pending=false;
+    if(srcSel==='auto' && r.detected) entry.srcLabel=r.detected;
+    updateEntryView(div, entry);
+    persist();
     scrollLog();
   }).catch(()=>{
-    const dEl=div.querySelector('.dst');
-    dEl.textContent='（翻譯失敗，已保留原文）';
-    div.querySelector('.badge').textContent='✕';
+    entry.dst='（翻譯失敗，已保留原文）'; entry.engine='fail'; entry.pending=false;
+    updateEntryView(div, entry);
+    persist();
   });
+}
+
+function renderEntry(entry){
+  $('emptyState')?.remove();
+  const div=document.createElement('div');
+  div.className='entry tapcopy'; div.id=entry.id;
+  div.innerHTML=
+    `<div class="meta"><span class="t">${entry.time}</span>`+
+    `<span class="dir"></span><span class="badge"></span></div>`+
+    `<div class="src"></div><div class="dst"></div>`;
+  div.querySelector('.src').textContent=entry.src;
+  div.onclick=()=>copyOne(entry);
+  $('log').appendChild(div);
+  updateEntryView(div, entry);
+  return div;
+}
+
+function updateEntryView(div, entry){
+  const dir=div.querySelector('.dir');
+  const srcShow=(entry.srcSel==='auto' && entry.detected)?entry.detected:entry.srcLabel;
+  dir.textContent=`${srcShow} → ${LANG_LABEL[entry.dstLang]}`;
+  const dEl=div.querySelector('.dst');
+  const b=div.querySelector('.badge');
+  b.className='badge';
+  if(entry.pending){
+    dEl.textContent='翻譯中…'; dEl.classList.add('pending');
+    b.classList.add('pending'); b.textContent='…';
+  }else{
+    dEl.textContent=entry.dst; dEl.classList.remove('pending');
+    if(entry.engine==='ai'){ b.classList.add('ai'); b.textContent='AI'; }
+    else if(entry.engine==='google'){ b.classList.add('google'); b.textContent='google'; }
+    else if(entry.engine==='fail'){ b.classList.add('backup'); b.textContent='✕'; }
+    else { b.classList.add('backup'); b.textContent='備援'; }
+  }
 }
 
 function scrollLog(){ const l=$('log'); l.scrollTop=l.scrollHeight; }
@@ -435,8 +522,10 @@ async function translate(text, fromSel, toLang){
 
 async function geminiTranslate(text, fromSel, toLang, key){
   const auto = (fromSel==='auto');
+  const topic = getTopic();
   const prompt =
     'You are a professional interpreter for business meetings in the financial securities and IT industry. '+
+    (topic ? 'Context for this session (use it to disambiguate terms and acronyms): '+topic+' ' : '')+
     (auto
       ? 'Detect the source language of the utterance, then translate it into '+LANG_NAME[toLang]+'. '
       : 'Translate the following '+LANG_NAME[fromSel]+' utterance into '+LANG_NAME[toLang]+'. ')+
@@ -584,8 +673,14 @@ async function copyAll(){
 function clearAll(){
   if(!entries.length){ closeSheet(); return; }
   if(!confirm('確定清除本次所有紀錄？此動作無法復原。')) return;
-  entries=[]; $('log').innerHTML=''; closeSheet(); toast('已清除');
+  entries=[]; seq=0; $('log').innerHTML='';
+  try{ localStorage.removeItem('entries'); }catch(_){}
+  closeSheet(); toast('已清除');
 }
+
+/* 啟動：復原上次未匯出的紀錄 */
+restore();
+
 </script>
 </body>
 </html>
