@@ -619,21 +619,30 @@ let micStream=null;
 let entries=[];   // {time, srcLabel, dstLang, src, dst, engine}
 let seq=0;
 
+// Gemini Audio 路線用
+let mediaRecorder=null, geminiAudioStream=null, chunkTimer=null;
+
 function toggleRec(){ recording ? stopRec() : startRec(); }
 
 function recogLang(){
   const v = $('srcLang').value;
   if(v !== 'auto') return v;
-  // 自動偵測時，辨識引擎需要一個啟動語言：優先裝置語言，否則英文
   const n = (navigator.language || 'en-US');
   return n;
 }
 
 async function startRec(){
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR){ toast('此瀏覽器不支援語音辨識，請改用 Chrome'); return; }
+  const key = getKey();
 
-  // 進階：若開啟「關閉回聲消除」，先持有一條原始麥克風音軌
+  // 有 Gemini key → 走 MediaRecorder + Gemini Audio 路線（繞開瀏覽器回聲消除）
+  if(key){
+    return startRecGemini(key);
+  }
+
+  // 沒 key → 走原本 SpeechRecognition
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ toast('此瀏覽器不支援語音辨識，請改用 Chrome 或設定 Gemini API Key'); return; }
+
   if(getRawMic()){
     try{
       micStream = await navigator.mediaDevices.getUserMedia({
@@ -671,7 +680,7 @@ async function startRec(){
   };
   rec.onend = () => {
     if(liveEl){ liveEl.remove(); liveEl=null; }
-    if(!manualStop && recording){ try{ rec.start(); }catch(_){} }
+    if(!manualStop && recording){ setTimeout(()=>{ if(!manualStop && recording) try{ rec.start(); }catch(_){} }, 300); }
     else setRecUI(false);
   };
   manualStop=false;
@@ -679,10 +688,110 @@ async function startRec(){
   acquireWake();
   setRecUI(true);
 }
+
+/* ── Gemini Audio 收音路線 ── */
+const GEMINI_CHUNK_MS = 8000; // 每 8 秒切一段
+
+async function startRecGemini(key){
+  try{
+    geminiAudioStream = await navigator.mediaDevices.getUserMedia({
+      audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+    });
+  }catch(e){
+    toast('無法取得麥克風權限'); return;
+  }
+
+  // 選擇瀏覽器支援的格式
+  const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg']
+    .find(m => MediaRecorder.isTypeSupported(m)) || '';
+
+  manualStop = false;
+  setRecUI(true);
+  acquireWake();
+
+  function startChunk(){
+    if(!recording) return;
+
+    const chunks = [];
+    let mr;
+    try{
+      mr = new MediaRecorder(geminiAudioStream, mimeType ? { mimeType } : {});
+    }catch(_){
+      mr = new MediaRecorder(geminiAudioStream);
+    }
+    mediaRecorder = mr;
+
+    mr.ondataavailable = e => { if(e.data && e.data.size > 0) chunks.push(e.data); };
+
+    mr.onstop = async () => {
+      if(chunks.length === 0) return;
+      const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
+      // 顯示「辨識中…」
+      const liveEl = addLive();
+      try{
+        const text = await geminiAudioTranscribe(blob, key);
+        liveEl.remove();
+        if(text) commitEntry(text);
+      }catch(err){
+        liveEl.remove();
+        // rate limit 或其他錯誤，靜默跳過這段
+        console.warn('Gemini Audio error:', err);
+      }
+      // 繼續下一段
+      if(recording) startChunk();
+    };
+
+    mr.start();
+    chunkTimer = setTimeout(()=>{ try{ mr.stop(); }catch(_){} }, GEMINI_CHUNK_MS);
+  }
+
+  startChunk();
+}
+
+async function geminiAudioTranscribe(blob, key){
+  // 轉 base64
+  const ab = await blob.arrayBuffer();
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(ab)));
+  const mimeType = blob.type || 'audio/webm';
+
+  const srcSel = $('srcLang').value;
+  const langHint = srcSel === 'auto'
+    ? '請自動偵測語言並轉錄。'
+    : `語言為 ${LANG_NAME[srcSel]}，請轉錄。`;
+
+  const prompt = `你是專業的語音轉文字工具。${langHint}只輸出轉錄的文字內容，不要加任何說明、標點補充或前綴。若這段音訊沒有人聲或聽不清楚，只輸出空字串。`;
+
+  const res = await fetch(
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(key),
+    { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        contents:[{ parts:[
+          { inline_data:{ mime_type: mimeType, data: b64 } },
+          { text: prompt }
+        ]}],
+        generationConfig:{ temperature:0, maxOutputTokens:1024 }
+      })
+    }
+  );
+  if(!res.ok){
+    const errBody = await res.json().catch(()=>({}));
+    throw new Error('gemini-audio ' + res.status + ' ' + JSON.stringify(errBody));
+  }
+  const data = await res.json();
+  const text = (data?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim();
+  return text;
+}
+
 function stopRec(){
   manualStop=true; recording=false;
+  // 停止 SpeechRecognition 路線
   if(rec) try{ rec.stop(); }catch(_){}
   if(micStream){ try{ micStream.getTracks().forEach(t=>t.stop()); }catch(_){} micStream=null; }
+  // 停止 Gemini Audio 路線
+  clearTimeout(chunkTimer);
+  if(mediaRecorder && mediaRecorder.state !== 'inactive') try{ mediaRecorder.stop(); }catch(_){}
+  mediaRecorder=null;
+  if(geminiAudioStream){ try{ geminiAudioStream.getTracks().forEach(t=>t.stop()); }catch(_){} geminiAudioStream=null; }
   releaseWake();
   setRecUI(false);
 }
