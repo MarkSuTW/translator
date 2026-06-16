@@ -247,7 +247,7 @@
       <path d="M23.5 8.8 A 14 14 0 0 1 23.5 31.2" fill="none" stroke="url(#lg)" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>
     </svg>
     <div class="names">
-      <span class="cn">三心譯記 <span class="ver" id="verTag">v2.0-debug9</span></span>
+      <span class="cn">三心譯記 <span class="ver" id="verTag">v2.0-debug10</span></span>
       <span class="en">TRIMIND · 三心餓易</span>
     </div>
   </div>
@@ -479,7 +479,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v2.0-debug9';
+const APP_VERSION = 'v2.0-debug10';
 const $ = id => document.getElementById(id);
 
 /* ── 除錯訊息 ── */
@@ -704,9 +704,8 @@ function recogLang(){
   return n;
 }
 
-/* 壓縮重複：只處理「完全相同片段連續重複」這種高把握的辨識瑕疵，
-   例如「火車喔火車喔火車喔」→「火車喔」。
-   對於有一字之差的長段重複，寧可保留也不亂切（避免破壞正常文字）。 */
+/* 壓縮重複：處理辨識引擎「同段文字反覆重發」的瑕疵。
+   全部採完全比對，只在高把握時才壓縮，絕不冒險改動正常文字。 */
 function collapseRepeats(s){
   if(!s || s.length < 4) return s;
 
@@ -719,8 +718,19 @@ function collapseRepeats(s){
     if(isPeriodic && s.length % len === 0) return s.slice(0, len);
   }
 
-  // B. 相鄰完整重複：head 後面緊接著一模一樣的 head → 砍掉一份
-  for(let len = Math.floor(s.length/2); len >= 4; len--){
+  // B. 長段重複：若前綴 head 在後面完整再次出現（中間最多夾數字），
+  //    視為整段重發 → 保留第一遍與最後一遍之後的新內容。
+  const n = s.length;
+  for(let L = Math.floor(n*0.6); L >= 8; L--){
+    const head = s.slice(0, L);
+    const next = s.indexOf(head, L);     // 完全比對找 head 再次出現
+    if(next >= L && next - L <= 6){       // 兩遍之間最多夾 6 字
+      return collapseRepeats(head + s.slice(next + L));
+    }
+  }
+
+  // C. 相鄰完整重複（短段）：head 後緊接一模一樣的 head
+  for(let len = Math.floor(n/2); len >= 4; len--){
     if(s.slice(0, len) === s.slice(len, len*2)){
       return collapseRepeats(s.slice(0, len) + s.slice(len*2));
     }
