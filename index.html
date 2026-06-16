@@ -247,7 +247,7 @@
       <path d="M23.5 8.8 A 14 14 0 0 1 23.5 31.2" fill="none" stroke="url(#lg)" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>
     </svg>
     <div class="names">
-      <span class="cn">三心譯記 <span class="ver" id="verTag">v2.0-debug5</span></span>
+      <span class="cn">三心譯記 <span class="ver" id="verTag">v2.0-debug7</span></span>
       <span class="en">TRIMIND · 三心餓易</span>
     </div>
   </div>
@@ -428,6 +428,22 @@
     </p>
 
     <div style="border-top:1px solid var(--line);margin:18px 0 14px"></div>
+    <h3>付費備援（選填）</h3>
+    <p style="font-size:13px;color:var(--dim);line-height:1.7;margin-bottom:12px">
+      當免費 Gemini 額度用完（出現「已達每日上限」）時，<b>自動改用 OpenAI 付費辨識</b>，會議不中斷。<br>
+      未填則維持純免費，撞到上限就停止。OpenAI 按分鐘計費（約每分鐘 NT$0.1~0.2），新帳號送 US$5 額度。
+    </p>
+    <input id="oaiKeyInput" type="password" placeholder="sk-..." autocomplete="off">
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim);margin-bottom:14px">
+      <input type="checkbox" onchange="document.getElementById('oaiKeyInput').type=this.checked?'text':'password'"> 顯示 key
+    </label>
+    <button class="sheetbtn" style="text-align:center;background:var(--gold);color:var(--ink);font-weight:700;border:none" onclick="saveOaiKey()">儲存備援 key</button>
+    <button class="sheetbtn danger" onclick="removeOaiKey()">清除備援 key</button>
+    <p style="font-size:12px;color:var(--dim);line-height:1.7;margin-top:6px">
+      取得方式：platform.openai.com → API keys → Create new secret key
+    </p>
+
+    <div style="border-top:1px solid var(--line);margin:18px 0 14px"></div>
     <h3>收音進階設定</h3>
     <label class="switch-row" onclick="event.stopPropagation()">
       <span>
@@ -463,7 +479,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v2.0-debug5';
+const APP_VERSION = 'v2.0-debug7';
 const $ = id => document.getElementById(id);
 
 /* ── 除錯訊息 ── */
@@ -586,6 +602,7 @@ function toggleRawMic(on){
 
 function openKey(){
   $('keyInput').value = getKey();
+  $('oaiKeyInput').value = getOaiKey();
   $('rawMicChk').checked = getRawMic();
   $('keySheet').classList.add('open');
 }
@@ -599,6 +616,23 @@ function saveKey(){
 function removeKey(){
   memKey=''; try{ localStorage.removeItem('gemini_key'); }catch(_){}
   $('keyInput').value=''; refreshEngineBar(); toast('已清除，改用 Google 翻譯');
+}
+
+/* ── OpenAI 付費備援 key ── */
+let memOaiKey='';
+function getOaiKey(){
+  try{ return localStorage.getItem('openai_key') || memOaiKey; }catch(_){ return memOaiKey; }
+}
+function saveOaiKey(){
+  const v = $('oaiKeyInput').value.trim();
+  if(v && !v.startsWith('sk-')){ toast('格式不像 OpenAI key（應為 sk- 開頭）'); return; }
+  memOaiKey = v; try{ localStorage.setItem('openai_key', v); }catch(_){}
+  closeKey();
+  toast(v ? '付費備援已啟用（免費用完才會啟動）' : '已清空付費備援');
+}
+function removeOaiKey(){
+  memOaiKey=''; try{ localStorage.removeItem('openai_key'); }catch(_){}
+  $('oaiKeyInput').value=''; toast('已清除付費備援');
 }
 
 /* ── 模式：翻譯 / 會議記錄 ── */
@@ -682,21 +716,23 @@ async function startRec(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){ toast('此瀏覽器不支援語音辨識，請改用 Chrome 或設定 Gemini API Key'); return; }
 
-  if(getRawMic()){
-    try{
-      micStream = await navigator.mediaDevices.getUserMedia({
-        audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false }
-      });
-    }catch(_){ micStream=null; }
-  }
+  // ⚠️ 不要在這裡呼叫 getUserMedia！
+  // SpeechRecognition 不接受外部 stream，先佔住麥克風反而會讓它在 Android 上拿不到音訊 → 完全沒字。
 
+  dbg('▶ 啟動瀏覽器語音辨識 (免費)');
   rec = new SR();
   rec.lang = recogLang();
   rec.continuous = true;
   rec.interimResults = true;
+  rec.maxAlternatives = 1;
+  dbg('辨識語言:', rec.lang);
   let liveEl=null;
+  let gotAnyResult=false;
+
+  rec.onstart = () => dbg('✓ 辨識已啟動，請開始說話');
 
   rec.onresult = e => {
+    gotAnyResult = true;
     let interim='', finals=[];
     for(let i=e.resultIndex;i<e.results.length;i++){
       const r=e.results[i];
@@ -711,21 +747,37 @@ async function startRec(){
     finals.forEach(text=>{
       if(!text) return;
       if(liveEl){ liveEl.remove(); liveEl=null; }
+      dbg('✓ 辨識:', '「'+text.slice(0,20)+'」');
       commitEntry(text);
     });
   };
   rec.onerror = e => {
-    if(e.error==='not-allowed'){ toast('請允許麥克風權限'); stopRec(); }
+    dbg('⚠ 辨識錯誤:', e.error);
+    if(e.error==='not-allowed' || e.error==='service-not-allowed'){
+      toast('請允許麥克風權限'); stopRec();
+    }
+    // no-speech / aborted / network 等：交給 onend 自動重啟
   };
   rec.onend = () => {
     if(liveEl){ liveEl.remove(); liveEl=null; }
-    if(!manualStop && recording){ setTimeout(()=>{ if(!manualStop && recording) try{ rec.start(); }catch(_){} }, 300); }
-    else setRecUI(false);
+    if(!manualStop && recording){
+      setTimeout(()=>{ if(!manualStop && recording) try{ rec.start(); }catch(_){} }, 300);
+    } else {
+      setRecUI(false);
+    }
   };
   manualStop=false;
-  try{ rec.start(); }catch(_){}
+  try{ rec.start(); }catch(err){ dbg('❌ 啟動失敗:', err.message); }
   acquireWake();
   setRecUI(true);
+
+  // 8 秒後若完全沒收到任何結果，提示使用者
+  setTimeout(()=>{
+    if(recording && !gotAnyResult){
+      dbg('⚠ 8秒內沒收到辨識結果');
+      toast('收不到聲音？請把手機靠近音源，或確認音量');
+    }
+  }, 8000);
 }
 
 /* ── Gemini Audio 收音路線 ── */
@@ -773,21 +825,18 @@ async function startRecGemini(key){
     mr.onstop = async () => {
       if(chunks.length === 0){ dbg('· 這段沒有音訊資料'); if(recording) startChunk(); return; }
       const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
-      dbg('🎙 錄到一段音訊', Math.round(blob.size/1024)+'KB,送 Gemini…');
-      // 顯示「辨識中…」
       const liveEl = addLive();
       try{
-        const text = await geminiAudioTranscribe(blob, key);
+        const text = await transcribeChunk(blob, key);
         liveEl.remove();
-        dbg('✓ Gemini 回傳:', text ? ('「'+text.slice(0,30)+'」') : '(空,可能無人聲)');
         if(text) commitEntry(text);
       }catch(err){
         liveEl.remove();
-        dbg('❌ Gemini Audio 失敗:', err.message);
-        console.warn('Gemini Audio error:', err);
-        // 撞到每日上限就停止，避免無意義狂送
+        dbg('❌ 辨識失敗:', err.message);
+        console.warn('transcribe error:', err);
+        // 免費與付費都用完（或無備援）才停止
         if(String(err.message).startsWith('429')){
-          toast('已達 Gemini 免費每日上限，已停止');
+          toast('已達每日上限，已停止');
           stopRec();
           return;
         }
@@ -824,20 +873,29 @@ async function geminiAudioTranscribe(blob, key){
 1. 只輸出聽到的口語文字內容。
 2. 絕對不要輸出任何時間戳記、秒數標記（例如 00:00、0003、00:01 這類數字）。
 3. 不要加任何說明、前綴、標題或解釋。
-4. 若這段音訊沒有人聲或聽不清楚，只輸出空字串，不要編造內容。`;
+4. 若這段音訊沒有人聲、聽不清楚、或只是雜音，只輸出空字串，不要編造或重複填充內容。
+5. 絕對不要把同一個詞或短語連續重複多次來填充。`;
 
-  const res = await fetch(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' + encodeURIComponent(key),
-    { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        contents:[{ parts:[
-          { inline_data:{ mime_type: mimeType, data: b64 } },
-          { text: prompt }
-        ]}],
-        generationConfig:{ temperature:0, maxOutputTokens:1024 }
-      })
-    }
-  );
+  // 送出（503 高負載時自動重試一次）
+  async function callOnce(){
+    return fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' + encodeURIComponent(key),
+      { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          contents:[{ parts:[
+            { inline_data:{ mime_type: mimeType, data: b64 } },
+            { text: prompt }
+          ]}],
+          generationConfig:{ temperature:0, maxOutputTokens:1024 }
+        })
+      }
+    );
+  }
+  let res = await callOnce();
+  if(res.status === 503){
+    await new Promise(r=>setTimeout(r, 1500));
+    res = await callOnce();
+  }
   if(!res.ok){
     const errBody = await res.json().catch(()=>({}));
     const msg = errBody?.error?.message || '';
@@ -853,7 +911,32 @@ async function geminiAudioTranscribe(blob, key){
              .replace(/\b\d{4,6}\b/g, ' ')
              .replace(/\s{2,}/g, ' ')
              .trim();
+  text = dedupeHallucination(text);
   return text;
+}
+
+/* 偵測並移除「同一短語連續重複」的幻覺輸出 */
+function dedupeHallucination(text){
+  if(!text) return text;
+  // 以中文標點切成片段，壓掉連續相同片段
+  const parts = text.split(/([，。、！？\s])/).filter(s=>s!=='');
+  const out = [];
+  let prev = '', repeat = 0;
+  for(const p of parts){
+    const token = p.trim();
+    if(token && token === prev){
+      repeat++;
+      if(repeat >= 2) continue; // 同一片段連出現第3次起全部丟掉
+    } else if(token){
+      repeat = 0; prev = token;
+    }
+    out.push(p);
+  }
+  let r = out.join('').replace(/\s{2,}/g,' ').trim();
+  // 再保險：整串若超過 8 個相同短語循環，直接截到第一次
+  const m = r.match(/^(.{2,10}?[，。、])\1{3,}/);
+  if(m) r = m[1];
+  return r;
 }
 
 function stopRec(){
