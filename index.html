@@ -247,7 +247,7 @@
       <path d="M23.5 8.8 A 14 14 0 0 1 23.5 31.2" fill="none" stroke="url(#lg)" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>
     </svg>
     <div class="names">
-      <span class="cn">三心譯記 <span class="ver" id="verTag">v2.0-debug7</span></span>
+      <span class="cn">三心譯記 <span class="ver" id="verTag">v2.0-debug8</span></span>
       <span class="en">TRIMIND · 三心餓易</span>
     </div>
   </div>
@@ -479,7 +479,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v2.0-debug7';
+const APP_VERSION = 'v2.0-debug8';
 const $ = id => document.getElementById(id);
 
 /* ── 除錯訊息 ── */
@@ -728,28 +728,27 @@ async function startRec(){
   dbg('辨識語言:', rec.lang);
   let liveEl=null;
   let gotAnyResult=false;
+  let sessionFinal='';   // 本次辨識 session 累積的最終文字
 
-  rec.onstart = () => dbg('✓ 辨識已啟動，請開始說話');
+  rec.onstart = () => { sessionFinal=''; dbg('✓ 辨識已啟動，請開始說話'); };
 
   rec.onresult = e => {
     gotAnyResult = true;
-    let interim='', finals=[];
-    for(let i=e.resultIndex;i<e.results.length;i++){
+    // 重新組裝整個 session：把所有 final 串起來，未定的當 interim
+    let finalText='', interim='';
+    for(let i=0;i<e.results.length;i++){
       const r=e.results[i];
-      if(r.isFinal) finals.push(r[0].transcript.trim());
+      if(r.isFinal) finalText += r[0].transcript;
       else interim += r[0].transcript;
     }
-    if(interim){
+    sessionFinal = finalText.trim();
+    // live 區顯示「目前已確定 + 正在辨識」
+    const show = (sessionFinal + ' ' + interim).trim();
+    if(show){
       if(!liveEl) liveEl=addLive();
-      liveEl.querySelector('.src').textContent = interim;
+      liveEl.querySelector('.src').textContent = show;
       scrollLog();
     }
-    finals.forEach(text=>{
-      if(!text) return;
-      if(liveEl){ liveEl.remove(); liveEl=null; }
-      dbg('✓ 辨識:', '「'+text.slice(0,20)+'」');
-      commitEntry(text);
-    });
   };
   rec.onerror = e => {
     dbg('⚠ 辨識錯誤:', e.error);
@@ -759,7 +758,14 @@ async function startRec(){
     // no-speech / aborted / network 等：交給 onend 自動重啟
   };
   rec.onend = () => {
+    // session 結束：把這一整段確定的文字存成「一筆」
     if(liveEl){ liveEl.remove(); liveEl=null; }
+    const text = sessionFinal.trim();
+    if(text){
+      dbg('✓ 辨識:', '「'+text.slice(0,20)+'」');
+      commitEntry(text);
+    }
+    sessionFinal='';
     if(!manualStop && recording){
       setTimeout(()=>{ if(!manualStop && recording) try{ rec.start(); }catch(_){} }, 300);
     } else {
@@ -827,7 +833,7 @@ async function startRecGemini(key){
       const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
       const liveEl = addLive();
       try{
-        const text = await transcribeChunk(blob, key);
+        const text = await geminiAudioTranscribe(blob, key);
         liveEl.remove();
         if(text) commitEntry(text);
       }catch(err){
