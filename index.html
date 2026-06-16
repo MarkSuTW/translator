@@ -247,7 +247,7 @@
       <path d="M23.5 8.8 A 14 14 0 0 1 23.5 31.2" fill="none" stroke="url(#lg)" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>
     </svg>
     <div class="names">
-      <span class="cn">三心譯記 <span class="ver" id="verTag">v2.0-debug8</span></span>
+      <span class="cn">三心譯記 <span class="ver" id="verTag">v2.0-debug9</span></span>
       <span class="en">TRIMIND · 三心餓易</span>
     </div>
   </div>
@@ -479,7 +479,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v2.0-debug8';
+const APP_VERSION = 'v2.0-debug9';
 const $ = id => document.getElementById(id);
 
 /* ── 除錯訊息 ── */
@@ -704,6 +704,30 @@ function recogLang(){
   return n;
 }
 
+/* 壓縮重複：只處理「完全相同片段連續重複」這種高把握的辨識瑕疵，
+   例如「火車喔火車喔火車喔」→「火車喔」。
+   對於有一字之差的長段重複，寧可保留也不亂切（避免破壞正常文字）。 */
+function collapseRepeats(s){
+  if(!s || s.length < 4) return s;
+
+  // A. 整串純週期重複：火車喔火車喔火車喔 → 火車喔
+  for(let len = 1; len <= Math.floor(s.length/2); len++){
+    let isPeriodic = true;
+    for(let i=len; i<s.length; i++){
+      if(s[i] !== s[i % len]){ isPeriodic = false; break; }
+    }
+    if(isPeriodic && s.length % len === 0) return s.slice(0, len);
+  }
+
+  // B. 相鄰完整重複：head 後面緊接著一模一樣的 head → 砍掉一份
+  for(let len = Math.floor(s.length/2); len >= 4; len--){
+    if(s.slice(0, len) === s.slice(len, len*2)){
+      return collapseRepeats(s.slice(0, len) + s.slice(len*2));
+    }
+  }
+  return s;
+}
+
 async function startRec(){
   const key = getKey();
 
@@ -734,15 +758,30 @@ async function startRec(){
 
   rec.onresult = e => {
     gotAnyResult = true;
-    // 重新組裝整個 session：把所有 final 串起來，未定的當 interim
-    let finalText='', interim='';
+    // 收集所有 final 片段與 interim
+    const finalParts=[];
+    let interim='';
     for(let i=0;i<e.results.length;i++){
       const r=e.results[i];
-      if(r.isFinal) finalText += r[0].transcript;
+      if(r.isFinal) finalParts.push(r[0].transcript.trim());
       else interim += r[0].transcript;
     }
-    sessionFinal = finalText.trim();
-    // live 區顯示「目前已確定 + 正在辨識」
+    // Android Chrome 會把同一句的 final 反覆「加長重發」：
+    // 若後一段包含前一段（前綴重複），只保留較長的，不要串接。
+    let assembled='';
+    for(const part of finalParts){
+      if(!part) continue;
+      if(assembled && (part.startsWith(assembled) || assembled.endsWith(part))){
+        // part 是 assembled 的延長版 → 用 part 取代
+        assembled = part.startsWith(assembled) ? part : assembled;
+      } else if(assembled && part.includes(assembled)){
+        assembled = part;
+      } else {
+        assembled = assembled ? (assembled + part) : part;
+      }
+    }
+    sessionFinal = assembled.trim();
+    // live 區顯示
     const show = (sessionFinal + ' ' + interim).trim();
     if(show){
       if(!liveEl) liveEl=addLive();
@@ -760,7 +799,7 @@ async function startRec(){
   rec.onend = () => {
     // session 結束：把這一整段確定的文字存成「一筆」
     if(liveEl){ liveEl.remove(); liveEl=null; }
-    const text = sessionFinal.trim();
+    const text = collapseRepeats(sessionFinal.trim());
     if(text){
       dbg('✓ 辨識:', '「'+text.slice(0,20)+'」');
       commitEntry(text);
