@@ -247,7 +247,7 @@
       <path d="M23.5 8.8 A 14 14 0 0 1 23.5 31.2" fill="none" stroke="url(#lg)" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>
     </svg>
     <div class="names">
-      <span class="cn">三心譯記 <span class="ver" id="verTag">v2.0-debug10</span></span>
+      <span class="cn">三心譯記 <span class="ver" id="verTag">v2.0-debug11</span></span>
       <span class="en">TRIMIND · 三心餓易</span>
     </div>
   </div>
@@ -479,7 +479,7 @@
 </div>
 
 <script>
-const APP_VERSION = 'v2.0-debug10';
+const APP_VERSION = 'v2.0-debug11';
 const $ = id => document.getElementById(id);
 
 /* ── 除錯訊息 ── */
@@ -704,6 +704,20 @@ function recogLang(){
   return n;
 }
 
+/* 漸進式合併：辨識引擎常把同一句「加長重發」(且夾帶少量字差)，
+   b 若是 a 的延長版，只取較長者，避免串接造成堆疊。 */
+function mergeGrowing(a, b){
+  if(!a) return b||'';
+  if(!b) return a;
+  let common=0;
+  const max=Math.min(a.length,b.length);
+  for(let i=0;i<max;i++){ if(a[i]===b[i]) common++; else break; }
+  if(common >= a.length*0.7) return b.length>=a.length ? b : a;
+  if(a.includes(b)) return a;
+  if(b.includes(a)) return b;
+  return a + b;
+}
+
 /* 壓縮重複：處理辨識引擎「同段文字反覆重發」的瑕疵。
    全部採完全比對，只在高把握時才壓縮，絕不冒險改動正常文字。 */
 function collapseRepeats(s){
@@ -776,19 +790,11 @@ async function startRec(){
       if(r.isFinal) finalParts.push(r[0].transcript.trim());
       else interim += r[0].transcript;
     }
-    // Android Chrome 會把同一句的 final 反覆「加長重發」：
-    // 若後一段包含前一段（前綴重複），只保留較長的，不要串接。
+    // Android Chrome 常把同一句反覆「加長重發」，且重發時夾帶一兩字差異。
+    // 用漸進式合併：每個新片段只把「相對於目前內容的新增尾巴」接上去。
     let assembled='';
     for(const part of finalParts){
-      if(!part) continue;
-      if(assembled && (part.startsWith(assembled) || assembled.endsWith(part))){
-        // part 是 assembled 的延長版 → 用 part 取代
-        assembled = part.startsWith(assembled) ? part : assembled;
-      } else if(assembled && part.includes(assembled)){
-        assembled = part;
-      } else {
-        assembled = assembled ? (assembled + part) : part;
-      }
+      assembled = mergeGrowing(assembled, part);
     }
     sessionFinal = assembled.trim();
     // live 區顯示
